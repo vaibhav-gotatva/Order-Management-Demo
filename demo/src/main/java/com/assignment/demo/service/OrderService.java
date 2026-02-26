@@ -6,4 +6,5 @@ import org.springframework.security.core.Authentication;
 
 public interface OrderService {
     OrderResponse createOrder(CreateOrderRequest req, Authentication authentication);
+    OrderResponse getOrderById(Long orderId, Authentication authentication);
 }

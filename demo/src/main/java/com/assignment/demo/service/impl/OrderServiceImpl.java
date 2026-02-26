@@ -11,6 +11,8 @@ import com.assignment.demo.repository.UserRepository;
 import com.assignment.demo.service.OrderService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.stereotype.Service;
@@ -94,6 +96,37 @@ public class OrderServiceImpl implements OrderService {
                 .userId(saved.getUserId())
                 .createdAt(saved.getCreatedAt())
                 .updatedAt(saved.getUpdatedAt())
+                .build();
+    }
+
+    @Override
+    @Cacheable(value = "orders", key = "#orderId + '_' + #authentication.name")
+    public OrderResponse getOrderById(Long orderId, Authentication authentication) {
+
+        // 1. Fetch order from DB (on cache miss)
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new EntityNotFoundException("Order not found with id: " + orderId));
+
+        // 2. Role-based access check
+        User caller = (User) authentication.getPrincipal();
+        boolean isAdmin = authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch(a -> a.equals("ROLE_ADMIN"));
+
+        if (!isAdmin && !order.getUserId().equals(caller.getId())) {
+            throw new AccessDeniedException("Access denied");
+        }
+
+        // 3. Map to response
+        return OrderResponse.builder()
+                .orderId(order.getOrderId())
+                .orderType(order.getOrderType())
+                .quantity(order.getQuantity())
+                .price(order.getPrice())
+                .status(order.getStatus())
+                .userId(order.getUserId())
+                .createdAt(order.getCreatedAt())
+                .updatedAt(order.getUpdatedAt())
                 .build();
     }
 }
