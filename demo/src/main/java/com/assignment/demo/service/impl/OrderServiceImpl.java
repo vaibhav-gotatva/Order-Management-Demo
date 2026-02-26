@@ -228,6 +228,13 @@ public class OrderServiceImpl implements OrderService {
 
         Page<Order> resultPage = orderRepository.findAll(spec, pageable);
 
+        // Validate requested page is within bounds (totalPages only known after query)
+        if (filter.getPage() > 0 && filter.getPage() >= resultPage.getTotalPages()) {
+            throw new IllegalArgumentException(
+                    "Page index " + filter.getPage() + " out of bounds. Total pages: " + resultPage.getTotalPages()
+            );
+        }
+
         // 11. Map to response
         List<OrderResponse> content = resultPage.getContent().stream()
                 .map(this::toResponse)
