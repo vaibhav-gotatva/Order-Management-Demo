@@ -66,7 +66,9 @@ This starts three containers:
 
 The app waits for MySQL to pass its health check before starting.
 
-### 4. Access the API
+Create Users via the register API to proceed with the testing of other APIs.
+
+### 4. API Documentation
 
 - **Swagger UI:** [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html)
 
