@@ -19,6 +19,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -59,7 +60,7 @@ public class OrderController {
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'USER')")
     public ResponseEntity<OrderResponse> createOrder(
-            @RequestBody CreateOrderRequest request,
+            @Valid @RequestBody CreateOrderRequest request,
             Authentication authentication) {
 
         OrderResponse response = orderService.createOrder(request, authentication);
@@ -190,7 +191,7 @@ public class OrderController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<OrderResponse> updateOrderStatus(
             @Parameter(description = "Order ID", required = true, example = "42") @PathVariable Long id,
-            @RequestBody UpdateOrderStatusRequest request,
+            @Valid @RequestBody UpdateOrderStatusRequest request,
             Authentication authentication) {
 
         return ResponseEntity.ok(orderService.updateOrderStatus(id, request, authentication));

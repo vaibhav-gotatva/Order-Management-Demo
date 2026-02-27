@@ -16,6 +16,7 @@ import com.assignment.demo.service.UserRedisService;
 import com.assignment.demo.specification.OrderSpecification;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.Cache;
@@ -26,6 +27,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -44,6 +47,9 @@ import java.util.stream.Collectors;
 public class OrderServiceImpl implements OrderService {
 
     private static final Logger log = LoggerFactory.getLogger(OrderServiceImpl.class);
+
+    @Setter(onMethod_ = {@Autowired, @Lazy})
+    private OrderServiceImpl self;
 
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
@@ -75,10 +81,7 @@ public class OrderServiceImpl implements OrderService {
             effectiveUserId = caller.getId();
         }
 
-        // 4. Validate orderType
-        if (req.getOrderType() == null || req.getOrderType().isBlank()) {
-            throw new IllegalArgumentException("orderType is required");
-        }
+        // 4. Parse and validate orderType (null/blank already handled by @NotBlank)
         OrderType orderType;
         try {
             orderType = OrderType.valueOf(req.getOrderType().trim().toUpperCase());
@@ -86,23 +89,7 @@ public class OrderServiceImpl implements OrderService {
             throw new IllegalArgumentException("Invalid orderType. Accepted values: BUY, SELL");
         }
 
-        // 5. Validate quantity
-        if (req.getQuantity() == null) {
-            throw new IllegalArgumentException("quantity is required");
-        }
-        if (req.getQuantity() <= 0) {
-            throw new IllegalArgumentException("quantity must be greater than 0");
-        }
-
-        // 6. Validate price
-        if (req.getPrice() == null) {
-            throw new IllegalArgumentException("price is required");
-        }
-        if (req.getPrice().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalArgumentException("price must be greater than 0");
-        }
-
-        // 7. Build and persist the order
+        // 5. Build and persist the order
         Order saved = orderRepository.save(Order.builder()
                 .orderType(orderType)
                 .quantity(req.getQuantity())
@@ -121,21 +108,26 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
-    @Cacheable(value = "orders", key = "#orderId")
     public OrderResponse getOrderById(Long orderId, Authentication authentication) {
 
-        // 1. Fetch order from DB (on cache miss)
-        Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new EntityNotFoundException("Order not found with id: " + orderId));
+        // 1. Fetch order (from Redis cache or DB) — via self-proxy so @Cacheable is honoured
+        OrderResponse response = self.fetchOrderById(orderId);
 
-        // 2. Role-based access check
+        // 2. Role-based access check — always runs, even on cache hit
         User caller = (User) authentication.getPrincipal();
         boolean isAdmin = hasRole(authentication, "ROLE_ADMIN");
 
-        if (!isAdmin && !order.getUserId().equals(caller.getId())) {
+        if (!isAdmin && !response.getUserId().equals(caller.getId())) {
             throw new AccessDeniedException("Access denied");
         }
 
+        return response;
+    }
+
+    @Cacheable(value = "orders", key = "#orderId")
+    public OrderResponse fetchOrderById(Long orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new EntityNotFoundException("Order not found with id: " + orderId));
         return toResponse(order);
     }
 
@@ -269,11 +261,7 @@ public class OrderServiceImpl implements OrderService {
     @Transactional
     public OrderResponse updateOrderStatus(Long orderId, UpdateOrderStatusRequest request, Authentication authentication) {
 
-        // 1. Validate request body
-        if (request == null || request.getStatus() == null || request.getStatus().isBlank()) {
-            throw new IllegalArgumentException("status is required");
-        }
-        // 2. Parse and validate the requested new status
+        // 1. Parse and validate the requested new status (null/blank already handled by @NotBlank)
         OrderStatus newStatus;
         try {
             newStatus = OrderStatus.valueOf(request.getStatus().trim().toUpperCase());
