@@ -146,7 +146,6 @@ public class OrderServiceImpl implements OrderService {
         // 1. Resolve caller identity and role
         User caller = (User) authentication.getPrincipal();
         boolean isAdmin = hasRole(authentication, "ROLE_ADMIN");
-        boolean isViewer = hasRole(authentication, "ROLE_VIEWER");
 
         // 2. Enforce userId scoping
         Long effectiveUserId;
@@ -156,9 +155,6 @@ public class OrderServiceImpl implements OrderService {
                 throw new EntityNotFoundException("User not found with id: " + filter.getUserId());
             }
             effectiveUserId = filter.getUserId(); // null = no filter, all users
-        } else if (isViewer) {
-            // VIEWER: always sees all orders; userId param is silently ignored
-            effectiveUserId = null;
         } else {
             // USER: always scoped to their own orders; userId param is silently ignored
             effectiveUserId = caller.getId();
@@ -277,7 +273,11 @@ public class OrderServiceImpl implements OrderService {
         if (request == null || request.getStatus() == null || request.getStatus().isBlank()) {
             throw new IllegalArgumentException("status is required");
         }
-
+        try {
+            Thread.sleep(2000);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
         // 2. Parse and validate the requested new status
         OrderStatus newStatus;
         try {

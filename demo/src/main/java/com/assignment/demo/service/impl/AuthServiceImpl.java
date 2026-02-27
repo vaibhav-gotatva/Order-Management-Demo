@@ -65,7 +65,7 @@ public class AuthServiceImpl implements AuthService {
             try {
                 roleEnum = Role.valueOf(rawRole.toUpperCase());
             } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("Invalid role. Accepted values: ADMIN, USER, VIEWER");
+                throw new IllegalArgumentException("Invalid role. Accepted values: ADMIN, USER");
             }
         }
 

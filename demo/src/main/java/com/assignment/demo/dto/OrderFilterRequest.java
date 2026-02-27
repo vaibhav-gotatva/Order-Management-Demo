@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 @Data
 public class OrderFilterRequest {
 
-    // ADMIN only — VIEWER and USER have this silently ignored
+    // ADMIN only — USER has this silently ignored
     private Long userId;
 
     // Enum filters — accepted as String from query params, parsed and validated in service

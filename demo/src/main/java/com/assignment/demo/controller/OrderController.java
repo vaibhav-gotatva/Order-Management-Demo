@@ -54,7 +54,7 @@ public class OrderController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'USER', 'VIEWER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'USER')")
     public ResponseEntity<PagedOrderResponse> listOrders(
             @RequestParam(required = false) Long userId,
             @RequestParam(required = false) String orderType,
