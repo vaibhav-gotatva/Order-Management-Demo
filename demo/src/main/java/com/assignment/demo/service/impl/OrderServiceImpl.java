@@ -273,11 +273,6 @@ public class OrderServiceImpl implements OrderService {
         if (request == null || request.getStatus() == null || request.getStatus().isBlank()) {
             throw new IllegalArgumentException("status is required");
         }
-        try {
-            Thread.sleep(2000);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
         // 2. Parse and validate the requested new status
         OrderStatus newStatus;
         try {
