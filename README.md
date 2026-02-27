@@ -30,7 +30,7 @@ A Spring Boot REST API demonstrating Role-Based Access Control, JWT Authenticati
 ### 1. Clone the repository
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/vaibhav-gotatva/Order-Management-Demo.git
 cd Order-Management-Demo/demo
 ```
 
