@@ -23,6 +23,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/orders")
@@ -95,5 +97,23 @@ public class OrderController {
             Authentication authentication) {
 
         return ResponseEntity.ok(orderService.updateOrderStatus(id, request, authentication));
+    }
+
+    @GetMapping("/{userId}/order-count")
+    @PreAuthorize("hasAnyRole('ADMIN', 'USER')")
+    public ResponseEntity<Map<String, Object>> getUserOrderCount(
+            @PathVariable Long userId,
+            Authentication authentication) {
+
+        return ResponseEntity.ok(orderService.countUserOrders(userId, authentication));
+    }
+
+    @GetMapping("/{userId}/recent-orders")
+    @PreAuthorize("hasAnyRole('ADMIN', 'USER')")
+    public ResponseEntity<List<OrderResponse>> getUserRecentOrders(
+            @PathVariable Long userId,
+            Authentication authentication) {
+
+        return ResponseEntity.ok(orderService.getRecentOrdersForUser(userId, authentication));
     }
 }

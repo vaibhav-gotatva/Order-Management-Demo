@@ -12,6 +12,7 @@ import com.assignment.demo.enums.OrderType;
 import com.assignment.demo.repository.OrderRepository;
 import com.assignment.demo.repository.UserRepository;
 import com.assignment.demo.service.OrderService;
+import com.assignment.demo.service.UserRedisService;
 import com.assignment.demo.specification.OrderSpecification;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +35,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -46,6 +48,7 @@ public class OrderServiceImpl implements OrderService {
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
     private final CacheManager cacheManager;
+    private final UserRedisService userRedisService;
 
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
             "createdAt", "updatedAt", "price", "quantity", "orderId", "status", "orderType"
@@ -108,7 +111,13 @@ public class OrderServiceImpl implements OrderService {
                 .userId(effectiveUserId)
                 .build());
 
-        return toResponse(saved);
+        OrderResponse response = toResponse(saved);
+
+        // 8. Update Redis counter and recent-orders list (best-effort; failures are logged, never thrown)
+        userRedisService.incrementOrderCount(effectiveUserId);
+        userRedisService.pushRecentOrder(effectiveUserId, response);
+
+        return response;
     }
 
     @Override
@@ -295,10 +304,62 @@ public class OrderServiceImpl implements OrderService {
         order.setStatus(newStatus);
         Order saved = orderRepository.save(order);
 
-        // 6. Evict the cache entry for this order
+        // 6. Evict the single-order cache entry and invalidate the user's recent-orders list
         evictOrderCache(orderId);
+        userRedisService.invalidateRecentOrders(saved.getUserId());
 
         return toResponse(saved);
+    }
+
+    @Override
+    public Map<String, Object> countUserOrders(Long userId, Authentication authentication) {
+        User caller = (User) authentication.getPrincipal();
+        boolean isAdmin = hasRole(authentication, "ROLE_ADMIN");
+
+        if (!isAdmin && !caller.getId().equals(userId)) {
+            throw new AccessDeniedException("Access denied");
+        }
+        if (isAdmin && !userRepository.existsById(userId)) {
+            throw new EntityNotFoundException("User not found with id: " + userId);
+        }
+
+        Long count = userRedisService.getOrderCount(userId);
+        if (count == null) {
+            log.warn("Redis miss for order count, userId '{}': falling back to DB and re-seeding Redis", userId);
+            count = orderRepository.countByUserId(userId);
+            // Re-seed Redis with the accurate DB count so subsequent reads are served from Redis
+            userRedisService.seedOrderCount(userId, count);
+        }
+
+        return Map.of("userId", userId, "orderCount", count);
+    }
+
+    @Override
+    public List<OrderResponse> getRecentOrdersForUser(Long userId, Authentication authentication) {
+        User caller = (User) authentication.getPrincipal();
+        boolean isAdmin = hasRole(authentication, "ROLE_ADMIN");
+
+        if (!isAdmin && !caller.getId().equals(userId)) {
+            throw new AccessDeniedException("Access denied");
+        }
+        if (isAdmin && !userRepository.existsById(userId)) {
+            throw new EntityNotFoundException("User not found with id: " + userId);
+        }
+
+        List<OrderResponse> cached = userRedisService.getRecentOrders(userId);
+        if (cached != null) {
+            return cached;
+        }
+
+        log.warn("Redis miss for recent orders, userId '{}': falling back to DB", userId);
+        List<Order> orders = orderRepository.findTop10ByUserIdOrderByCreatedAtDesc(userId);
+        List<OrderResponse> result = orders.stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
+
+        userRedisService.repopulateRecentOrders(userId, result);
+
+        return result;
     }
 
     private void evictOrderCache(Long orderId) {
