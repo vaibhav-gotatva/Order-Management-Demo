@@ -91,8 +91,3 @@ Create Users via the register API to proceed with the testing of other APIs.
 docker-compose down
 ```
 
-To also remove volumes (database data):
-
-```bash
-docker-compose down -v
-```
