@@ -22,8 +22,6 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
 
-    private static final String EMAIL_REGEX = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$";
-
     private final UserRepository userRepository;
     private final UserRoleRepository userRoleRepository;
     private final PasswordEncoder passwordEncoder;
@@ -32,29 +30,11 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public String register(RegisterRequest req) {
-        // ── fullName ──────────────────────────────────────────────────────────
-        String fullName = req.getFullName() == null ? null : req.getFullName().trim();
-        if (fullName == null || fullName.isBlank())
-            throw new IllegalArgumentException("Full name is required");
-        if (fullName.length() > 100)
-            throw new IllegalArgumentException("Full name must not exceed 100 characters");
-
-        // ── email ─────────────────────────────────────────────────────────────
-        String email = req.getEmail() == null ? null : req.getEmail().trim();
-        if (email == null || email.isBlank())
-            throw new IllegalArgumentException("Email is required");
-        if (!email.matches(EMAIL_REGEX))
-            throw new IllegalArgumentException("Invalid email format");
-        email = email.toLowerCase();
-
-        // ── password ──────────────────────────────────────────────────────────
-        String password = req.getPassword() == null ? null : req.getPassword().trim();
-        if (password == null || password.isBlank())
-            throw new IllegalArgumentException("Password is required");
-        if (password.length() < 6)
-            throw new IllegalArgumentException("Password must be at least 6 characters");
-        if (password.length() > 72)
-            throw new IllegalArgumentException("Password must not exceed 72 characters");
+        // Null/blank/size/format checks are handled by Bean Validation (@NotBlank, @Size, @Pattern)
+        // Trim and normalize values for persistence
+        String fullName = req.getFullName().trim();
+        String email = req.getEmail().trim().toLowerCase();
+        String password = req.getPassword().trim();
 
         // ── role ──────────────────────────────────────────────────────────────
         Role roleEnum;
@@ -65,7 +45,7 @@ public class AuthServiceImpl implements AuthService {
             try {
                 roleEnum = Role.valueOf(rawRole.toUpperCase());
             } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("Invalid role. Accepted values: ADMIN, USER, VIEWER");
+                throw new IllegalArgumentException("Invalid role. Accepted values: ADMIN, USER");
             }
         }
 
@@ -93,18 +73,9 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public AuthResponse login(LoginRequest req) {
-        // ── email ─────────────────────────────────────────────────────────────
-        String email = req.getEmail() == null ? null : req.getEmail().trim();
-        if (email == null || email.isBlank())
-            throw new IllegalArgumentException("Email is required");
-        if (!email.matches(EMAIL_REGEX))
-            throw new IllegalArgumentException("Invalid email format");
-        email = email.toLowerCase();
-
-        // ── password ──────────────────────────────────────────────────────────
-        String password = req.getPassword() == null ? null : req.getPassword().trim();
-        if (password == null || password.isBlank())
-            throw new IllegalArgumentException("Password is required");
+        // Null/blank/format checks are handled by Bean Validation (@NotBlank, @Pattern)
+        String email = req.getEmail().trim().toLowerCase();
+        String password = req.getPassword().trim();
 
         // ── authenticate ──────────────────────────────────────────────────────
         authenticationManager.authenticate(
