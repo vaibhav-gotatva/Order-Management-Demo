@@ -4,6 +4,7 @@ import com.assignment.demo.dto.CreateOrderRequest;
 import com.assignment.demo.dto.OrderFilterRequest;
 import com.assignment.demo.dto.OrderResponse;
 import com.assignment.demo.dto.PagedOrderResponse;
+import com.assignment.demo.dto.UpdateOrderStatusRequest;
 import com.assignment.demo.entity.Order;
 import com.assignment.demo.entity.User;
 import com.assignment.demo.enums.OrderStatus;
@@ -14,6 +15,10 @@ import com.assignment.demo.service.OrderService;
 import com.assignment.demo.specification.OrderSpecification;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -27,6 +32,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -35,8 +41,11 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class OrderServiceImpl implements OrderService {
 
+    private static final Logger log = LoggerFactory.getLogger(OrderServiceImpl.class);
+
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
+    private final CacheManager cacheManager;
 
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
             "createdAt", "updatedAt", "price", "quantity", "orderId", "status", "orderType"
@@ -103,7 +112,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
-    @Cacheable(value = "orders", key = "#orderId + '_' + #authentication.name")
+    @Cacheable(value = "orders", key = "#orderId")
     public OrderResponse getOrderById(Long orderId, Authentication authentication) {
 
         // 1. Fetch order from DB (on cache miss)
@@ -162,7 +171,8 @@ public class OrderServiceImpl implements OrderService {
             try {
                 parsedStatus = OrderStatus.valueOf(filter.getStatus().trim().toUpperCase());
             } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("Invalid status. Accepted values: NEW");
+                throw new IllegalArgumentException("Invalid status. Accepted values: " +
+                        Arrays.stream(OrderStatus.values()).map(Enum::name).collect(Collectors.joining(", ")));
             }
         }
 
@@ -248,6 +258,57 @@ public class OrderServiceImpl implements OrderService {
                 .totalPages(resultPage.getTotalPages())
                 .last(resultPage.isLast())
                 .build();
+    }
+
+    @Override
+    @Transactional
+    public OrderResponse updateOrderStatus(Long orderId, UpdateOrderStatusRequest request, Authentication authentication) {
+
+        // 1. Validate request body
+        if (request == null || request.getStatus() == null || request.getStatus().isBlank()) {
+            throw new IllegalArgumentException("status is required");
+        }
+
+        // 2. Parse and validate the requested new status
+        OrderStatus newStatus;
+        try {
+            newStatus = OrderStatus.valueOf(request.getStatus().trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Invalid status. Accepted values: " +
+                    Arrays.stream(OrderStatus.values()).map(Enum::name).collect(Collectors.joining(", ")));
+        }
+
+        // 3. Fetch the order (throws 404 if not found)
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new EntityNotFoundException("Order not found with id: " + orderId));
+
+        // 4. Validate state transition
+        if (!order.getStatus().canTransitionTo(newStatus)) {
+            throw new IllegalArgumentException(
+                    "Invalid status transition: " + order.getStatus() + " → " + newStatus +
+                    ". Allowed transitions from " + order.getStatus() + ": " +
+                    order.getStatus().allowedTransitions()
+            );
+        }
+
+        // 5. Apply update — @Version causes ObjectOptimisticLockingFailureException on concurrent write → 409
+        order.setStatus(newStatus);
+        Order saved = orderRepository.save(order);
+
+        // 6. Evict the cache entry for this order
+        evictOrderCache(orderId);
+
+        return toResponse(saved);
+    }
+
+    private void evictOrderCache(Long orderId) {
+        try {
+            Cache ordersCache = cacheManager.getCache("orders");
+            if (ordersCache == null) return;
+            ordersCache.evict(orderId);
+        } catch (RuntimeException e) {
+            log.warn("Redis EVICT error for order '{}': {}", orderId, e.getMessage());
+        }
     }
 
     private boolean hasRole(Authentication authentication, String role) {

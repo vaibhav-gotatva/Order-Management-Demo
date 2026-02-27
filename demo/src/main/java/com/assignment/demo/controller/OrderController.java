@@ -4,6 +4,7 @@ import com.assignment.demo.dto.CreateOrderRequest;
 import com.assignment.demo.dto.OrderFilterRequest;
 import com.assignment.demo.dto.OrderResponse;
 import com.assignment.demo.dto.PagedOrderResponse;
+import com.assignment.demo.dto.UpdateOrderStatusRequest;
 import com.assignment.demo.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -12,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -83,5 +85,15 @@ public class OrderController {
         filter.setSortDir(sortDir);
 
         return ResponseEntity.ok(orderService.listOrders(filter, authentication));
+    }
+
+    @PatchMapping("/{id}/status")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<OrderResponse> updateOrderStatus(
+            @PathVariable Long id,
+            @RequestBody UpdateOrderStatusRequest request,
+            Authentication authentication) {
+
+        return ResponseEntity.ok(orderService.updateOrderStatus(id, request, authentication));
     }
 }

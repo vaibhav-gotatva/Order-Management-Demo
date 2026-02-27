@@ -5,6 +5,7 @@ import jakarta.persistence.EntityNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -49,6 +50,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleNotFound(EntityNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler({ObjectOptimisticLockingFailureException.class,
+                       jakarta.persistence.OptimisticLockException.class})
+    public ResponseEntity<Map<String, String>> handleOptimisticLock(Exception ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("error", "Order was modified by another request. Please retry with the latest state."));
     }
 
     @ExceptionHandler(Exception.class)
